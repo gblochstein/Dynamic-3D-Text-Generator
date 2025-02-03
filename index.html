@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Typing Effect with Y-axis Rotation (Centered)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://threejs.org/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://threejs.org/examples/js/geometries/TextGeometry.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; color: white; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+    <script>
+        let scene, camera, renderer, textMesh, font, textGroup;
+        let currentText = "Hello";  // Initial text
+        let rotationInProgress = false; // Flag for rotation
+        let rotationTimer = null; // Timer for detecting inactivity
+        let targetRotationY = 0; // Target rotation along Y-axis when typing resumes
+        let currentRotationY = 0; // Current rotation along Y-axis
+        const rotationSpeed = 0.01; // Speed of automatic rotation when idle
+        const rotationReturnSpeed = 0.05; // Speed of smooth return to the original position
+
+        // Initialize Scene
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 10; // Initial position
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 5, 5);
+            scene.add(light);
+
+            // Load Font
+            const loader = new THREE.FontLoader();
+            loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', function(loadedFont) {
+                font = loadedFont;
+                createText(currentText);
+            });
+
+            animate();
+        }
+
+        // Create 3D Text
+        function createText(text) {
+            if (textGroup) scene.remove(textGroup); // Remove the existing group if exists
+
+            const textGeometry = new THREE.TextGeometry(text, {
+                font: font,
+                size: 2,
+                height: 0.5,
+                curveSegments: 12,
+                bevelEnabled: true,
+                bevelThickness: 0.1,
+                bevelSize: 0.1,
+                bevelOffset: 0,
+                bevelSegments: 5
+            });
+
+            textGeometry.computeBoundingBox();
+            const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
+            const textHeight = textGeometry.boundingBox.max.y - textGeometry.boundingBox.min.y;
+
+            // Create a group to hold the text mesh (for centering and rotation control)
+            textGroup = new THREE.Group();
+
+            // Create text mesh
+            const material = new THREE.MeshStandardMaterial({ color: 0xff6600 });
+            textMesh = new THREE.Mesh(textGeometry, material);
+
+            // Center the geometry to rotate around its center
+            const textCenterX = -(textGeometry.boundingBox.max.x + textGeometry.boundingBox.min.x) / 2;
+            const textCenterY = -(textGeometry.boundingBox.max.y + textGeometry.boundingBox.min.y) / 2;
+
+            // Position the text at the center, ensuring proper rotation around the center
+            textMesh.position.set(textCenterX, textCenterY, 0);
+
+            // Add the text mesh to the group
+            textGroup.add(textMesh);
+            scene.add(textGroup);
+
+            // Adjust camera position to center the text
+            camera.position.z = Math.max(10, textWidth); // Keep a reasonable distance based on text width
+            camera.position.y = textCenterY; // Make sure camera is centered vertically on the text
+
+            // Reset the rotation to the original position (Y-axis rotation only)
+            textGroup.rotation.set(0, 0, 0);
+            currentRotationY = 0;
+            targetRotationY = 0;
+        }
+
+        // Listen for typing and reset the timer
+        document.addEventListener("keydown", (event) => {
+            clearTimeout(rotationTimer); // Clear the rotation timer on any key press
+            rotationInProgress = false; // Stop the rotation once typing resumes
+
+            if (event.key.length === 1) {
+                currentText += event.key;
+            } else if (event.key === "Backspace") {
+                currentText = currentText.slice(0, -1);
+            }
+            if (font) {
+                createText(currentText || " ");
+            }
+
+            // Start a new timer for idle rotation
+            rotationTimer = setTimeout(startRotating, 1000); // 1 second delay
+        });
+
+        // Start rotating the text along the Y-axis after a delay of inactivity
+        function startRotating() {
+            rotationInProgress = true;
+        }
+
+        // Efficiently smooth the rotation back to the original position along the Y-axis
+        function smoothRotation() {
+            if (rotationInProgress) {
+                // Rotate the entire group along the Y-axis when idle (centered rotation)
+                textGroup.rotation.y += rotationSpeed;
+            } else {
+                // Efficiently interpolate back to the original rotation along Y-axis (shortest path)
+                const delta = targetRotationY - textGroup.rotation.y;
+                const lerpFactor = rotationReturnSpeed;
+
+                // If the rotation is beyond 180 degrees, adjust for shortest path
+                if (Math.abs(delta) > Math.PI) {
+                    targetRotationY += (delta > 0 ? -2 * Math.PI : 2 * Math.PI);
+                }
+
+                // Rotate back to the original position in a smooth way
+                textGroup.rotation.y = THREE.MathUtils.lerp(textGroup.rotation.y, targetRotationY, lerpFactor);
+
+                // If we are close enough to the target rotation, stop the rotation
+                if (Math.abs(textGroup.rotation.y - targetRotationY) < 0.01) {
+                    textGroup.rotation.y = targetRotationY; // Snap to target
+                }
+            }
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            smoothRotation(); // Update smooth rotation along the Y-axis
+
+            renderer.render(scene, camera);
+        }
+
+        // Responsive
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+        init();
+    </script>
+
+</body>
+</html>
